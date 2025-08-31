@@ -12,7 +12,7 @@ template = PromptTemplate("Can you summarize this text into 3 bullet points: {in
 def read_root():
     return { "message": "world"}
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/summarize", response_model=ChatResponse)
 def chatOpenAi(request: ChatRequest):
     prompt = template.format(input_text=request.user_message)
     resp: Optional[str] = getChatResponse(prompt)
