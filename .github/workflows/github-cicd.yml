@@ -1,0 +1,33 @@
+name: Docker Build
+
+# Trigger workflow on PRs and pushes to main
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Step 3: Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build -t myapp:${{ github.sha }} .
+
+      # Optional Step 4: Run the container to test it
+      - name: Test Docker container
+        run: |
+          docker run --rm myapp:${{ github.sha }} echo "Docker build successful!"
