@@ -1,8 +1,12 @@
 from openai import OpenAI
 from fastapi import FastAPI
-from typing import Optional, Generator
-from models import RootResponse, ChatResponse, ChatRequest, PromptTemplate
+from typing import Optional, List
+from models import AnalysisResponse, RootResponse, ChatResponse, ChatRequest, PromptTemplate, TextRequest
+from services import getChatResponse
+from graphai import workflow
 import chromadb
+import tiktoken
+
 
 client = OpenAI()
 app = FastAPI()
@@ -11,6 +15,23 @@ chroma_client = chromadb.Client()
 
 # Create / get a collection
 collection = chroma_client.get_or_create_collection(name="docs")
+
+# ---- Tokenizer setup ----
+# Use GPT-3.5 tokenizer (works for embeddings + GPT-4 as well)
+tokenizer = tiktoken.get_encoding("cl100k_base")
+
+def chunk_text(text: str, max_tokens: int = 100, overlap: int = 20) -> List[str]:
+    """Split text into chunks based on token count with overlap."""
+    tokens = tokenizer.encode(text)
+    chunks = []
+    start = 0
+    while start < len(tokens):
+        end = min(start + max_tokens, len(tokens))
+        chunk_tokens = tokens[start:end]
+        chunk_text = tokenizer.decode(chunk_tokens)
+        chunks.append(chunk_text)
+        start += max_tokens - overlap  # move forward with overlap
+    return chunks
 
 
 # Function to load docs (for demo, just once at startup)
@@ -23,14 +44,16 @@ def load_docs():
     ]
     # Generate embeddings + add to collection
     for i, doc in enumerate(documents):
-        emb = client.embeddings.create(
-            model="text-embedding-3-small", input=doc
-        )
-        collection.add(
-            ids=[f"doc_{i}"],
-            documents=[doc],
-            embeddings=[emb.data[0].embedding]
-        )
+        chunks = chunk_text(doc, max_tokens=50, overlap=10)  # smaller chunks
+        for j, chunk in enumerate(chunks):
+            emb = client.embeddings.create(
+                model="text-embedding-3-small", input=chunk
+            )
+            collection.add(
+                ids=[f"doc_{i}_chunk_{j}"],
+                documents=[chunk],
+                embeddings=[emb.data[0].embedding]
+            )
 
 # Load docs once
 load_docs()
@@ -77,32 +100,14 @@ def rag_summarize(request: ChatRequest):
     return {"response": resp}
 
 
-def getChatResponse(prompt: str) -> Optional[str]:
-    try:
-
-        response = client.responses.create(
-            model="gpt-5-nano",
-            input=prompt
-        )
-
-        if not getattr(response, "output", None):
-            print("No output returned by the model.")
-            return None
-        message = next(
-            extract_message_texts(response),
-            None
-        )
-        return message
-    except Exception as e:
-        print("An error occurred: {e}")
-        return None
-
-def extract_message_texts(response) -> Generator[str, None, None]:
-    output = response.dict().get("output", [])
-    for msg in output:
-        if msg.get("type") == "message" and msg.get("content"):
-            yield msg["content"][0].get("text") 
-
-
+@app.post("/analyze", response_model=AnalysisResponse)
+async def analyze_text(request: TextRequest):
+    # Run workflow
+    result = workflow.invoke({"text": request.text})
+    print(result)
+    return AnalysisResponse(
+        summary=result["summary"],
+        sentiment=result["sentiment"]
+    )
 
 
