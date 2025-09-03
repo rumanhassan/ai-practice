@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Dict
 
 class RootResponse(BaseModel):
     message: str
@@ -24,3 +24,19 @@ class PromptTemplate:
 
     def format(self, **kargs):
         return self.template.format(**kargs)
+
+# Define state type
+class State(Dict):
+    text: str
+    summary: str
+    sentiment: str
+
+# Request model
+class TextRequest(BaseModel):
+    text: str
+
+# Response model
+class AnalysisResponse(BaseModel):
+    summary: str
+    sentiment: str
+
